@@ -3,7 +3,7 @@
 # Ranges are bounded to the next major version; requirements.lock is a pinned snapshot for auditing.
 pandas>=2.0,<3.0
 numpy>=1.24,<3.0
-PyYAML>=6.0,<7.0
+PyYAML>=6.0.3,<7.0
 python-dotenv>=1.0,<2.0
 streamlit>=1.50,<2.0
 plotly>=5.20,<8.0

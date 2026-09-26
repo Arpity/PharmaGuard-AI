@@ -175,8 +175,9 @@ def test_workflow_triggers_and_least_privilege():
 
 def test_pipeline_stages_run_in_the_required_order():
     jobs = WF["jobs"]
-    chain = ["quality", "unit-tests", "integration-tests", "security", "ai-evaluation-gate", "docker", "deploy"]
+    chain = ["dependencies", "quality", "unit-tests", "integration-tests", "security", "ai-evaluation-gate", "docker", "deploy"]
     assert list(jobs) == chain
+    assert "needs" not in jobs["dependencies"]
     for prev, cur in zip(chain, chain[1:]):
         assert jobs[cur]["needs"] == prev, f"{cur} must need {prev}"
 

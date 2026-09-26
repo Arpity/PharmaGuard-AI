@@ -233,14 +233,15 @@ Local development on older Pythons can use `pip install -r requirements-dev.txt`
 ### CI/CD flow (GitHub Actions: `.github/workflows/ci.yml`)
 ```
 push / pull request
-   └─ 1 Code quality        ruff, syntax check, config parse, bandit (medium+)
-       └─ 2 Unit tests      pytest (fast tests) + coverage gate >= 90 %
-           └─ 3 Integration pytest: cross-module, Streamlit pages, critical end-to-end workflow
-               └─ 4 Security   executable security controls (secret scan, guardrail probes, RBAC ...) + pip-audit on requirements.lock
-                   └─ 5 AI evaluation gate   68-case golden evaluation vs config/evaluation_gate.yaml
-                       └─ 6 Docker    hadolint, build, hardened smoke test (health, non-root, no secrets, every page loads),
-                                      image saved as artifact  (+ optional push to GHCR)
-                           └─ 7 Deploy   OPTIONAL - off unless DEPLOY_ENABLED=true, main branch only, 'production' environment
+   └─ 1 Dependency installation   pip install from requirements.lock + dev tools, `pip check`
+       └─ 2 Code quality        ruff, syntax check, config parse, bandit (medium+)
+           └─ 3 Unit tests      pytest (fast tests) + coverage gate >= 90 %
+               └─ 4 Integration pytest: cross-module, Streamlit pages, critical end-to-end workflow
+                   └─ 5 Security   executable security controls (secret scan, guardrail probes, RBAC ...) + pip-audit on requirements.lock
+                       └─ 6 AI evaluation gate   68-case golden evaluation vs config/evaluation_gate.yaml
+                           └─ 7 Docker    hadolint, build, hardened smoke test (health, non-root, no secrets, every page loads),
+                                          image saved as artifact  (+ optional push to GHCR)
+                               └─ 8 Deploy   OPTIONAL - off unless DEPLOY_ENABLED=true, main branch only, 'production' environment
 ```
 Each stage only runs if the previous one passed, so a failing test, failed security control, or failed AI/guardrail check stops
 the pipeline before an image is produced. No cloud credentials are needed: stages 1-6 use only the runner and the built-in

@@ -1,7 +1,7 @@
 # PharmaGuard AI - CI/CD
 #
 #  push / pull request
-#    -> quality (lint, syntax, static security)  -> unit tests (+coverage gate) -> integration & UI tests
+#    -> dependency installation -> quality (lint, syntax, static security)  -> unit tests (+coverage gate) -> integration & UI tests
 #    -> security & dependency checks             -> AI evaluation gate
 #    -> Docker build + container smoke test      -> deployment-ready image artifact
 #    -> (optional, off by default) publish image to GHCR  -> (optional, off by default) deploy
@@ -43,8 +43,32 @@ env:
 
 jobs:
   # ------------------------------------------------------------------------------------------------------------
+  dependencies:
+    name: 1 · Dependency installation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+      - name: Install pinned runtime + dev dependencies (fails if the lockfile cannot be satisfied)
+        run: pip install -c requirements.lock -r requirements-dev.txt
+      - name: Verify the environment is consistent
+        run: |
+          pip check
+          python --version
+          pip list --format=freeze | grep -iE "^(streamlit|pandas|numpy|plotly|pytest|ruff)=="
+
+  # ------------------------------------------------------------------------------------------------------------
   quality:
-    name: 1 · Code quality
+    name: 2 · Code quality
+    needs: dependencies
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -75,7 +99,7 @@ jobs:
 
   # ------------------------------------------------------------------------------------------------------------
   unit-tests:
-    name: 2 · Unit tests
+    name: 3 · Unit tests
     needs: quality
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -107,7 +131,7 @@ jobs:
 
   # ------------------------------------------------------------------------------------------------------------
   integration-tests:
-    name: 3 · Integration, UI & end-to-end tests
+    name: 4 · Integration, UI & end-to-end tests
     needs: unit-tests
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -133,7 +157,7 @@ jobs:
 
   # ------------------------------------------------------------------------------------------------------------
   security:
-    name: 4 · Security & dependency checks
+    name: 5 · Security & dependency checks
     needs: integration-tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -171,7 +195,7 @@ jobs:
 
   # ------------------------------------------------------------------------------------------------------------
   ai-evaluation-gate:
-    name: 5 · AI evaluation gate
+    name: 6 · AI evaluation gate
     needs: security
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -200,7 +224,7 @@ jobs:
 
   # ------------------------------------------------------------------------------------------------------------
   docker:
-    name: 6 · Docker build & smoke test
+    name: 7 · Docker build & smoke test
     needs: ai-evaluation-gate
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -284,7 +308,7 @@ jobs:
 
   # ------------------------------------------------------------------------------------------------------------
   deploy:
-    name: 7 · Deploy (optional, disabled by default)
+    name: 8 · Deploy (optional, disabled by default)
     needs: docker
     # Runs only on main, and only when the repository variable DEPLOY_ENABLED is 'true'.
     if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DEPLOY_ENABLED == 'true' }}

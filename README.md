@@ -261,7 +261,7 @@ Local development on older Pythons can use `pip install -r requirements-dev.txt`
 
 ### CI/CD flow (GitHub Actions: `.github/workflows/ci.yml`)
 ```
-push / pull request
+push to main / pull request
    └─ 1 Dependency installation   pip install from requirements.lock + dev tools, `pip check`
        └─ 2 Code quality        ruff, syntax check, config parse, bandit (medium+)
            └─ 3 Unit tests      pytest (fast tests) + coverage gate >= 90 %

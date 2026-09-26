@@ -12,7 +12,7 @@ name: CI/CD
 
 on:
   push:
-    branches: ["**"]
+    branches: [main]          # feature branches are tested through their pull request (avoids duplicate push + PR runs)
     tags: ["v*"]
   pull_request:
     branches: [main]

@@ -1,14 +1,28 @@
 # Keeps dependencies, base images and workflow actions current. Updates arrive as pull requests that must pass the full CI/CD gate.
+# Minor / patch updates are grouped into ONE pull request per ecosystem; major-version bumps are ignored (upgrade them deliberately,
+# e.g. pandas 3 or a new Python base image, and re-run the evaluation) to avoid a flood of breaking PRs.
 # Note: Dependabot updates requirements*.txt; regenerate requirements.lock afterwards (sh scripts/refresh_lock.sh) so the image and CI stay pinned.
 version: 2
 updates:
   - package-ecosystem: pip
     directory: "/"
     schedule: {interval: weekly}
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
+    groups:
+      python-minor-patch: {update-types: [minor, patch]}
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: docker
     directory: "/"
     schedule: {interval: weekly}
+    open-pull-requests-limit: 1
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule: {interval: weekly}
+    open-pull-requests-limit: 1
+    groups:
+      actions-minor-patch: {update-types: [minor, patch]}

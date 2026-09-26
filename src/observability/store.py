@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS spans (
   trace_id TEXT NOT NULL, span_id TEXT NOT NULL, run_id TEXT NOT NULL, parent_span_id TEXT, name TEXT NOT NULL, kind TEXT,
   start_ns INTEGER, end_ns INTEGER, duration_ms REAL, status_code TEXT, status_message TEXT, attributes TEXT, events TEXT,
   PRIMARY KEY (trace_id, span_id));
+CREATE TABLE IF NOT EXISTS security_events (
+  event_id INTEGER PRIMARY KEY AUTOINCREMENT, timestamp TEXT NOT NULL, event_type TEXT NOT NULL, severity TEXT NOT NULL,
+  user_name TEXT, user_role TEXT, source TEXT, detail TEXT, synthetic INTEGER DEFAULT 0);
 CREATE INDEX IF NOT EXISTS idx_req_ts ON ai_requests(timestamp);
 CREATE INDEX IF NOT EXISTS idx_span_run ON spans(run_id);
 """
@@ -100,6 +103,24 @@ class TraceStore:
                            r.status_code, r.status_message or ""))
         return to_otlp_json(sp, version=version)
 
+    # ---- security events (access denials etc. that never reach the AI pipeline) --------------------------
+    def record_security_event(self, event_type: str, severity: str, user: str = "", role: str = "", source: str = "",
+                              detail: str = "", timestamp: Optional[str] = None, synthetic: bool = False) -> None:
+        from src.guardrails.safe_errors import redact
+        ts = timestamp or datetime.now(timezone.utc).isoformat(timespec="seconds")
+        with self._conn() as c:
+            c.execute("INSERT INTO security_events (timestamp,event_type,severity,user_name,user_role,source,detail,synthetic) VALUES (?,?,?,?,?,?,?,?)",
+                      (ts, event_type, severity, user, role, source, redact(detail)[:300], int(synthetic)))
+
+    def security_events(self, since: Optional[str] = None, limit: int = 5000) -> pd.DataFrame:
+        q, p = "SELECT * FROM security_events", []
+        if since:
+            q += " WHERE timestamp >= ?"; p.append(since)
+        with self._conn() as c:
+            df = pd.read_sql_query(q + " ORDER BY timestamp DESC LIMIT ?", c, params=p + [limit])
+        df["synthetic"] = df["synthetic"].astype(bool)
+        return df
+
     def purge_older_than(self, days: int) -> int:
         """Retention control for the demo store."""
         cut = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
@@ -107,4 +128,5 @@ class TraceStore:
             ids = [r[0] for r in c.execute("SELECT run_id FROM ai_requests WHERE timestamp < ?", (cut,))]
             c.executemany("DELETE FROM spans WHERE run_id=?", [(i,) for i in ids])
             c.execute("DELETE FROM ai_requests WHERE timestamp < ?", (cut,))
+            c.execute("DELETE FROM security_events WHERE timestamp < ?", (cut,))
         return len(ids)

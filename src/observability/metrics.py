@@ -41,7 +41,7 @@ def kpis(df: pd.DataFrame) -> dict:
 def requests_over_time(df: pd.DataFrame, freq: str = "H") -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame(columns=["bucket", "final_status", "requests"])
-    t = pd.to_datetime(df["timestamp"], utc=True).dt.tz_localize(None).dt.floor(freq)
+    t = pd.to_datetime(df["timestamp"], utc=True, format="ISO8601").dt.tz_localize(None).dt.floor(freq)
     return df.assign(bucket=t).groupby(["bucket", "final_status"]).size().rename("requests").reset_index()
 
 

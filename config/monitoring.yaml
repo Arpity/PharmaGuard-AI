@@ -1,0 +1,47 @@
+# Production monitoring configuration: SLO thresholds, windows, pricing and data-drift settings.
+# status rule per indicator:  direction "max" -> value above warn/critical is bad;  "min" -> value below is bad.
+
+windows:
+  default: 24h            # 1h | 24h | 7d | all
+  drift_reference_fraction: 0.6   # earliest share of batches (by manufacturing date) used as the drift reference window
+
+slo:
+  # ---- application ----
+  availability_pct:            {direction: min, warn: 99.5, critical: 99.0}   # requests handled without an internal error
+  error_rate_pct:              {direction: max, warn: 1.0,  critical: 5.0}
+  latency_p95_ms:              {direction: max, warn: 1500, critical: 5000}
+  # ---- AI ----
+  answer_quality_pct:          {direction: min, warn: 95.0, critical: 90.0}   # golden-set evaluation, overall score
+  evaluation_age_days:         {direction: max, warn: 7,    critical: 30}     # stale evaluations are themselves a risk
+  unsupported_claim_rate_pct:  {direction: max, warn: 1.0,  critical: 5.0}    # live answers blocked / flagged by output validation
+  retrieval_failure_rate_pct:  {direction: max, warn: 1.0,  critical: 5.0}
+  guardrail_failure_rate_pct:  {direction: max, warn: 2.0,  critical: 10.0}   # model output that violated policy (caught & replaced)
+  # ---- data ----
+  missing_pct:                 {direction: max, warn: 5.0,  critical: 10.0}
+  data_quality_score:          {direction: min, warn: 97.0, critical: 93.0}
+  drift_psi_max:               {direction: max, warn: 0.10, critical: 0.25}   # Population Stability Index
+  schema_changes:              {direction: max, warn: 0,    critical: 0}      # any schema change is critical
+  # ---- security ----
+  unauthorized_requests:       {direction: max, warn: 3,    critical: 10}     # permission denials in the window
+  suspicious_input_rate_pct:   {direction: max, warn: 5.0,  critical: 15.0}   # injection / disposition attempts as a share of requests
+  # ---- cost ----
+  token_budget_utilisation_pct: {direction: max, warn: 80,  critical: 100}    # only evaluated when cost.token_budget_per_day is set
+  # ---- business ----
+  pending_review_backlog:      {direction: max, warn: 25,   critical: 100}    # AI runs awaiting human review
+
+cost:
+  token_budget_per_day: 200000       # set null to disable the budget indicator
+  monthly_budget_usd: null
+  # USD per 1M tokens, keyed by model id. Add the real prices of the models you use - none are assumed.
+  # The demo entry only prices the simulated model used by the demo traffic generator (ILLUSTRATIVE, not a real price list).
+  pricing_usd_per_1m_tokens:
+    demo-model-1: {input: 3.00, output: 15.00, note: "illustrative demo rate"}
+
+business:
+  manual_investigation_minutes: null   # optional assumption: minutes a manual investigation takes; enables an "estimated time saved" figure
+
+data:
+  drift_bins: 10
+  min_rows_per_window: 100     # PSI is noisy on small windows; below this no drift verdict is given
+  monitored_categories: [Plant, Product_Name, Operator_Shift, Quality_Status]
+  monitored_numeric: [Temperature, Humidity, pH, Dissolution, Assay, Impurity_Level, Yield_Percentage, Cycle_Time_Hrs, Batch_Size_Kg, Deviation_Count]

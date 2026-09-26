@@ -1,0 +1,24 @@
+{
+ "columns": {
+  "Batch_ID": "text",
+  "Product_Name": "text",
+  "Dosage_Form": "text",
+  "Manufacturing_Date": "date",
+  "Plant": "text",
+  "Batch_Size_Kg": "number",
+  "Temperature": "number",
+  "Humidity": "number",
+  "pH": "number",
+  "Dissolution": "number",
+  "Assay": "number",
+  "Impurity_Level": "number",
+  "Yield_Percentage": "number",
+  "Deviation_Count": "number",
+  "Equipment_ID": "text",
+  "Operator_Shift": "text",
+  "Cycle_Time_Hrs": "number",
+  "Quality_Status": "text"
+ },
+ "registered_at": "2026-09-26T08:18:02+00:00",
+ "rows": 3000
+}

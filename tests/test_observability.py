@@ -336,7 +336,7 @@ def test_demo_traffic_goes_through_the_real_pipeline(hist, kb, cfg, rec):
     counts = generate_demo_traffic(80, hist, kb, cfg, rec, seed=3, days=2)
     assert sum(counts.values()) == 80
     df = rec.store.requests()
-    assert len(df) == 80 and df["synthetic"].all() and df["run_id"].is_unique
+    assert len(df) == 80 - counts.get("unauthorized", 0) and df["synthetic"].all() and df["run_id"].is_unique
     assert {"success", "refused", "blocked"} <= set(df["final_status"])
     ts = pd.to_datetime(df["timestamp"], utc=True)
     assert (ts.max() - ts.min()).total_seconds() > 3600                                # back-dated across the window
@@ -375,7 +375,7 @@ def test_dashboard_shows_all_required_metrics(hist, kb, cfg, tmp_path, monkeypat
     monkeypatch.setenv("PHARMAGUARD_OBS_DB", str(tmp_path / "dash.db"))
     r = Recorder(TraceStore(tmp_path / "dash.db"))
     clean = kpis.load_clean(PROJECT_ROOT / "data" / "processed" / "pharma_batch_clean.csv") if (PROJECT_ROOT / "data" / "processed" / "pharma_batch_clean.csv").exists() else hist
-    generate_demo_traffic(60, clean, kb, cfg, r, seed=5)
+    counts = generate_demo_traffic(60, clean, kb, cfg, r, seed=5)
     at = AppTest.from_file(page("app/pages/7_Observability.py"), default_timeout=120)
     at.session_state["user_role"], at.session_state["user_name"] = "compliance_admin", "Ada Admin"
     at.run()
@@ -383,7 +383,7 @@ def test_dashboard_shows_all_required_metrics(hist, kb, cfg, tmp_path, monkeypat
     labels = {m.label: m.value for m in at.metric}
     for k in ("Total requests", "Success rate", "Failed requests", "Avg latency", "Guardrail blocks", "Retrieval failures", "Token usage"):
         assert k in labels, k
-    assert labels["Total requests"] == "60"
+    assert labels["Total requests"] == str(60 - counts.get("unauthorized", 0))
     assert not [b for b in at.button if "Generate demo" in b.label][0].disabled
     assert [t.label for t in at.tabs] == ["Overview", "Latency & tools", "Guardrails & retrieval", "Recent runs & traces"]
 

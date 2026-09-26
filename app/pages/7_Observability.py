@@ -28,6 +28,7 @@ user, role = ui.identity_sidebar()
 st.title("📡 Observability")
 st.caption("Every AI request gets a Run ID and a trace (OpenTelemetry-compatible spans). Telemetry is stored locally for the demo.")
 if not roles.can(role, "view_observability"):
+    ui.log_security_event("UNAUTHORIZED_ACCESS", "Observability page", f"view_observability denied for role {role}")
     st.error("Your role cannot view observability data (it contains user names and batch IDs). "
              "Switch to **QA Reviewer** or **Compliance / IT Admin** in the sidebar.")
     st.stop()
@@ -83,7 +84,7 @@ LAYOUT = dict(template="plotly_white", margin=dict(l=10, r=10, t=50, b=10))
 with tab_over:
     a, b = st.columns([2, 1])
     with a:
-        span_h = (pd.to_datetime(df["timestamp"], utc=True).max() - pd.to_datetime(df["timestamp"], utc=True).min()).total_seconds() / 3600
+        span_h = (pd.to_datetime(df["timestamp"], utc=True, format="ISO8601").max() - pd.to_datetime(df["timestamp"], utc=True, format="ISO8601").min()).total_seconds() / 3600
         ot = M.requests_over_time(df, "h" if span_h > 3 else "min")
         ot["status"] = ot["final_status"].map(M.STATUS_LABELS)
         fig = px.bar(ot, x="bucket", y="requests", color="final_status", color_discrete_map=STATUS_COLORS, title="Requests over time by final status",

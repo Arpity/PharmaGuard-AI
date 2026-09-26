@@ -1,0 +1,64 @@
+# Alert rules mirroring config/monitoring.yaml SLO thresholds. Metric names come from src/monitoring/prometheus.py.
+groups:
+  - name: pharmaguard-application
+    rules:
+      - alert: PharmaGuardAvailabilityLow
+        expr: pharmaguard_availability_ratio < 0.995
+        for: 5m
+        labels: {severity: warn}
+        annotations: {summary: "Availability below 99.5%", runbook: "availability_pct"}
+      - alert: PharmaGuardAvailabilityCritical
+        expr: pharmaguard_availability_ratio < 0.99
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: "Availability below 99%", runbook: "availability_pct"}
+      - alert: PharmaGuardLatencyP95High
+        expr: pharmaguard_request_latency_ms{quantile="0.95"} > 1500
+        for: 10m
+        labels: {severity: warn}
+        annotations: {summary: "p95 latency above 1.5 s", runbook: "latency_p95_ms"}
+  - name: pharmaguard-ai
+    rules:
+      - alert: PharmaGuardUnsupportedClaims
+        expr: pharmaguard_ai_unsupported_claim_ratio > 0.01
+        for: 10m
+        labels: {severity: warn}
+        annotations: {summary: "Unsupported claims above 1% of answers", runbook: "unsupported_claim_rate_pct"}
+      - alert: PharmaGuardGuardrailFailures
+        expr: pharmaguard_ai_guardrail_failures > 0
+        for: 15m
+        labels: {severity: warn}
+        annotations: {summary: "Model output is being blocked by output validation", runbook: "guardrail_failure_rate_pct"}
+      - alert: PharmaGuardAnswerQualityLow
+        expr: pharmaguard_ai_answer_quality_ratio < 0.95
+        labels: {severity: critical}
+        annotations: {summary: "Golden-set answer quality below 95%", runbook: "answer_quality_pct"}
+  - name: pharmaguard-data
+    rules:
+      - alert: PharmaGuardDataDrift
+        expr: max(pharmaguard_data_drift_psi) > 0.10
+        for: 30m
+        labels: {severity: warn}
+        annotations: {summary: "Data drift (PSI) above 0.10", runbook: "drift_psi_max"}
+      - alert: PharmaGuardSchemaChange
+        expr: pharmaguard_data_schema_changes > 0
+        labels: {severity: critical}
+        annotations: {summary: "Input data schema differs from the baseline", runbook: "schema_changes"}
+  - name: pharmaguard-security
+    rules:
+      - alert: PharmaGuardUnauthorizedRequests
+        expr: pharmaguard_security_unauthorized_requests > 3
+        labels: {severity: warn}
+        annotations: {summary: "Repeated permission denials", runbook: "unauthorized_requests"}
+      - alert: PharmaGuardIndicatorCritical
+        expr: pharmaguard_indicator_status == 2
+        for: 5m
+        labels: {severity: critical}
+        annotations: {summary: "Indicator {{ $labels.indicator }} is critical", runbook: "{{ $labels.indicator }}"}
+  - name: pharmaguard-business
+    rules:
+      - alert: PharmaGuardReviewBacklog
+        expr: pharmaguard_pending_reviews > 25
+        for: 1h
+        labels: {severity: warn}
+        annotations: {summary: "AI findings awaiting human review are piling up", runbook: "pending_review_backlog"}

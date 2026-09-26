@@ -289,3 +289,28 @@ gh run watch                                      # follow the pipeline
 ```
 No repository secrets are required for stages 1-6. Add optional *variables* (see the CI/CD section) under
 Settings > Secrets and variables > Actions > Variables.
+
+## Step 10 - Production monitoring
+Open **Production Monitoring** in the app (QA Reviewer / Compliance-IT Admin roles). It shows a status banner, a status card per
+domain and, per domain, indicators with `ok / warn / critical` status computed from `config/monitoring.yaml`:
+
+| Domain | Indicators |
+|---|---|
+| Application | availability, requests, errors, latency (p50 / p95 / max) |
+| AI | answer quality (golden set), evaluation age, unsupported claims, retrieval failures, guardrail failures (live output validation) |
+| Data | missingness, quality score, drift (PSI, latest vs earlier batches), missingness drift, schema changes vs baseline |
+| Security | failed / unauthorized requests (access denials), suspicious inputs (injection / disposition attempts), guardrail & security events |
+| Cost | token usage, LLM calls, estimated cost (only for models priced in config), token budget |
+| Business | investigations assisted, human approvals / rejections / more-analysis, approval rate, average support time, time to review, review backlog |
+
+Plus **Incidents & events** (critical/degraded requests, blocked outputs, injections, access denials, active alerts), **Health**
+probes and an **Integration** tab. Admins can **simulate production traffic** (with an incident burst), data drift and a schema
+change from the sidebar - simulated data is flagged `synthetic` and simulations are display-only.
+
+```bash
+python scripts/register_data_baseline.py     # (re)register the expected raw-data schema
+python scripts/metrics_server.py             # Prometheus exporter: http://127.0.0.1:9108/metrics  (--once prints)
+```
+Thresholds, windows, prices and budgets are in `config/monitoring.yaml`; no model prices are assumed (add yours). Integration with
+OpenTelemetry, Prometheus / Grafana (scrape config, alert rules, importable dashboard in `monitoring/`) and other platforms, plus what
+is real vs simulated in this demo, is documented in [docs/observability-integration.md](docs/observability-integration.md).

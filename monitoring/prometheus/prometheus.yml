@@ -1,0 +1,16 @@
+# Example Prometheus configuration for the PharmaGuard AI demo exporter (python scripts/metrics_server.py).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: pharmaguard
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["host.docker.internal:9108"]   # or "127.0.0.1:9108" when Prometheus runs on the host
+        labels:
+          service: pharmaguard-ai
+          environment: demo

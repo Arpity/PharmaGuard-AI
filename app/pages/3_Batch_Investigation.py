@@ -122,6 +122,8 @@ typed = st.chat_input("Ask a question about this batch...")
 question = clicked or typed
 can_ask = roles.can(role, "ask_assistant")
 if not can_ask:
+    if question:
+        ui.log_security_event("PERMISSION_DENIED", "Batch Investigation page", f"ask_assistant denied for role {role}")
     st.info(f"The **{roles.ROLES[role]}** role is read-only. Switch role in the sidebar to ask the assistant.")
 elif question:
     with st.spinner("Analysing batch and retrieving procedures..."):

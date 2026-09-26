@@ -3,7 +3,7 @@
 # and security-control results are computed live and are not stored here.
 system:
   name: PharmaGuard AI - Batch Investigation Assistant
-  version: 0.8.0-demo
+  version: 0.10.0-demo
   environment: Demonstration prototype on synthetic data
   use_case: Decision support for Quality Assurance staff investigating pharmaceutical batch quality. Python calculates all
     figures from batch data, relevant (synthetic) QA procedures are retrieved, and an optional language model explains the
@@ -160,6 +160,17 @@ risks:
   - secure_logging
   - review_store
   residual: Low
+- id: R11
+  risk: Undetected production degradation (errors, drift, schema breaks, cost overruns, security events)
+  likelihood: Medium
+  impact: High
+  mitigation: Production monitoring dashboard with SLO status indicators, incident feed, data drift and schema checks, cost
+    budgets and security event tracking; Prometheus / OpenTelemetry integration path
+  controls:
+  - monitoring
+  - observability
+  - data_quality
+  residual: Medium
 limitations:
 - Built and evaluated with synthetic data only; real-world accuracy is unknown.
 - Regex-based injection and disposition detection can be evaded (other languages, look-alike characters).
@@ -193,6 +204,9 @@ guardrails:
 - control: Observability & traceability
   implementation: src/observability/tracing.py
   purpose: Run ID + trace for every request; structured privacy-safe logs; OTLP-compatible export
+- control: Production monitoring
+  implementation: src/monitoring/snapshot.py
+  purpose: SLO indicators, drift / schema checks, security and cost signals with alerting thresholds
 human_oversight:
 - Every AI answer is stored with a Run ID and is reviewable on the QA Review page.
 - Authorized QA reviewers Approve, Reject or Request More Analysis on each AI finding; comments are mandatory to reject or
@@ -260,4 +274,15 @@ change_history:
   category: Observability
   change: Run IDs and OpenTelemetry-compatible tracing for every AI request, local trace store, structured logging, token-usage
     capture and Observability Dashboard; retrieval failures now degrade instead of failing the request
+  owner: Technical Owner
+- version: 0.9.0
+  date: '2026-09-26'
+  category: Delivery
+  change: Multi-stage non-root Docker image, requirements split with lockfile, GitHub Actions CI/CD with AI evaluation gate
+  owner: Technical Owner
+- version: 0.10.0
+  date: '2026-09-26'
+  category: Monitoring
+  change: Production monitoring dashboard (application, AI, data, security, cost, business), drift and schema checks, security
+    event tracking, Prometheus exporter and OpenTelemetry/Grafana integration assets
   owner: Technical Owner

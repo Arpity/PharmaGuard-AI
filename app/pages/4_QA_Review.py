@@ -104,6 +104,10 @@ with tab_queue:
                                                     "about the AI finding only; no batch status was changed.")
                 st.rerun()
             except (ReviewError, roles.PermissionDenied) as e:
+                if isinstance(e, roles.PermissionDenied):
+                    ui.log_security_event("PERMISSION_DENIED", "QA Review page", str(e))
+                elif "Four-eyes" in str(e):
+                    ui.log_security_event("FOUR_EYES_VIOLATION", "QA Review page", f"reviewer attempted to review own run {run_id}")
                 st.error(str(e))
 
 with tab_audit:

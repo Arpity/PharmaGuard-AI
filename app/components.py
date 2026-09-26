@@ -92,3 +92,12 @@ def identity_sidebar() -> tuple[str, str]:
 def get_recorder():
     from src.observability.recorder import get_recorder as _gr
     return _gr()
+
+
+def log_security_event(event_type: str, source: str, detail: str, severity: str = "medium") -> None:
+    """Record an access denial / policy violation for the monitoring dashboard. Never raises."""
+    try:
+        get_recorder().store.record_security_event(event_type, severity, st.session_state.get("user_name", ""),
+                                                   st.session_state.get("user_role", ""), source, detail)
+    except Exception:  # noqa: BLE001 - monitoring must not break the page
+        pass

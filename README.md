@@ -279,3 +279,12 @@ pytest -m "not integration and not e2e and not ui" --cov=src --cov-fail-under=90
 pytest -m "integration or e2e or ui"                                                  # integration / UI / end-to-end
 python scripts/run_security_checks.py && python scripts/evaluation_gate.py --run
 ```
+
+### Publish to GitHub
+```bash
+gh auth login --web --scopes "repo,workflow"      # one-time sign-in (workflow scope is needed to push .github/workflows)
+sh scripts/publish_to_github.sh PharmaGuard-AI    # creates a PRIVATE repo, pushes main, starts the CI/CD run  (add --public for public)
+gh run watch                                      # follow the pipeline
+```
+No repository secrets are required for stages 1-6. Add optional *variables* (see the CI/CD section) under
+Settings > Secrets and variables > Actions > Variables.

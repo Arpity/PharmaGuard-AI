@@ -1,0 +1,322 @@
+# PharmaGuard AI - CI/CD
+#
+#  push / pull request
+#    -> quality (lint, syntax, static security)  -> unit tests (+coverage gate) -> integration & UI tests
+#    -> security & dependency checks             -> AI evaluation gate
+#    -> Docker build + container smoke test      -> deployment-ready image artifact
+#    -> (optional, off by default) publish image to GHCR  -> (optional, off by default) deploy
+#
+# No cloud credentials are required or assumed. Publishing and deployment are opt-in via repository
+# *variables* (Settings > Secrets and variables > Actions > Variables); see the "CI/CD" section of README.md.
+name: CI/CD
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default; individual jobs raise it only where needed.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  # ---- AI evaluation gate configuration ------------------------------------------------------------
+  # Empty = use the defaults in config/evaluation_gate.yaml. Set a repository variable of the same name
+  # to change a threshold without editing code, e.g. EVAL_GATE_ANSWER_RELEVANCE_MIN=0.85.
+  EVAL_GATE_MODE: ${{ vars.EVAL_GATE_MODE }}
+  EVAL_GATE_ANALYTICAL_CORRECTNESS_MIN: ${{ vars.EVAL_GATE_ANALYTICAL_CORRECTNESS_MIN }}
+  EVAL_GATE_RETRIEVAL_RELEVANCE_MIN: ${{ vars.EVAL_GATE_RETRIEVAL_RELEVANCE_MIN }}
+  EVAL_GATE_ANSWER_RELEVANCE_MIN: ${{ vars.EVAL_GATE_ANSWER_RELEVANCE_MIN }}
+  EVAL_GATE_TOOL_SUCCESS_MIN: ${{ vars.EVAL_GATE_TOOL_SUCCESS_MIN }}
+  EVAL_GATE_GROUNDEDNESS_MIN: ${{ vars.EVAL_GATE_GROUNDEDNESS_MIN }}
+  EVAL_GATE_GUARDRAIL_SUCCESS_MIN: ${{ vars.EVAL_GATE_GUARDRAIL_SUCCESS_MIN }}
+  EVAL_GATE_LATENCY_P95_MS_MAX: ${{ vars.EVAL_GATE_LATENCY_P95_MS_MAX }}
+
+jobs:
+  # ------------------------------------------------------------------------------------------------------------
+  quality:
+    name: 1 · Code quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+      - name: Install dependencies
+        run: pip install -c requirements.lock -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check .
+      - name: Syntax check (compileall)
+        run: python -m compileall -q src app scripts config tests
+      - name: Configuration files parse
+        run: |
+          python - <<'PY'
+          import glob, yaml
+          for f in glob.glob("config/*.yaml") + glob.glob(".github/workflows/*.yml") + ["docker-compose.yml"]:
+              yaml.safe_load(open(f)); print("ok", f)
+          PY
+      - name: Static security analysis (bandit, medium+ severity)
+        run: bandit -q -r src app scripts config -ll
+
+  # ------------------------------------------------------------------------------------------------------------
+  unit-tests:
+    name: 2 · Unit tests
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+      - run: pip install -c requirements.lock -r requirements-dev.txt
+      - name: Unit tests with coverage gate
+        # Coverage threshold: fail if unit tests cover < 90 % of src/ (currently ~94 %).
+        run: >
+          pytest -m "not integration and not e2e and not ui"
+          --cov=src --cov=config --cov-report=term-missing --cov-report=xml --cov-fail-under=90
+          --junitxml=reports/junit-unit.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: |
+            reports/junit-unit.xml
+            coverage.xml
+          retention-days: 7
+
+  # ------------------------------------------------------------------------------------------------------------
+  integration-tests:
+    name: 3 · Integration, UI & end-to-end tests
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+      - run: pip install -c requirements.lock -r requirements-dev.txt
+      - name: Integration, Streamlit page and critical end-to-end workflow tests
+        run: pytest -m "integration or e2e or ui" --junitxml=reports/junit-integration.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: reports/junit-integration.xml
+          retention-days: 7
+
+  # ------------------------------------------------------------------------------------------------------------
+  security:
+    name: 4 · Security & dependency checks
+    needs: integration-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+      - run: pip install -c requirements.lock -r requirements-dev.txt
+      - name: Executable security controls (secret scan, guardrail probes, RBAC, logging, dependency hygiene)
+        # Exits non-zero if any control FAILS (hard-coded credentials, missing .gitignore entry, broken guardrail, ...).
+        run: python scripts/run_security_checks.py
+      - name: Known-vulnerability scan of pinned dependencies (pip-audit)
+        env:
+          # Blocking by default. To make it advisory set repository variable PIP_AUDIT_BLOCKING=false.
+          # To accept a specific advisory (with a documented reason) set PIP_AUDIT_IGNORE="PYSEC-XXXX,GHSA-xxxx".
+          PIP_AUDIT_BLOCKING: ${{ vars.PIP_AUDIT_BLOCKING || 'true' }}
+          PIP_AUDIT_IGNORE: ${{ vars.PIP_AUDIT_IGNORE }}
+        run: |
+          ignore_args=""
+          for id in $(echo "${PIP_AUDIT_IGNORE}" | tr ',' ' '); do ignore_args="$ignore_args --ignore-vuln $id"; done
+          if pip-audit -r requirements.lock $ignore_args; then
+            echo "### pip-audit: no known vulnerabilities" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${PIP_AUDIT_BLOCKING}" = "false" ]; then
+            echo "### pip-audit: vulnerabilities found (non-blocking: PIP_AUDIT_BLOCKING=false)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### pip-audit: vulnerabilities found - failing" >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+  # ------------------------------------------------------------------------------------------------------------
+  ai-evaluation-gate:
+    name: 5 · AI evaluation gate
+    needs: security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements.lock
+      - run: pip install -c requirements.lock -r requirements-dev.txt
+      - name: Run golden evaluation and apply gate thresholds
+        # Runs the 68-case golden dataset in deterministic demo mode (no LLM key, no network), then checks it against
+        # config/evaluation_gate.yaml (+ EVAL_GATE_* overrides above). Fails on any blocking check:
+        # guardrail / groundedness / unsafe-output checks are ALWAYS blocking; other thresholds block in enforce mode.
+        run: python scripts/evaluation_gate.py --run
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ai-evaluation-report
+          path: reports/evaluation/latest.json
+          retention-days: 30
+
+  # ------------------------------------------------------------------------------------------------------------
+  docker:
+    name: 6 · Docker build & smoke test
+    needs: ai-evaluation-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write          # only used when PUBLISH_IMAGE=true (pushes to GHCR with the built-in GITHUB_TOKEN)
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dockerfile lint (hadolint)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          failure-threshold: error
+      - id: meta
+        name: Image name and tag
+        run: |
+          owner="$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')"
+          echo "image=ghcr.io/${owner}/pharmaguard-ai" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (loaded locally, not pushed)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: pharmaguard-ai:${{ steps.meta.outputs.tag }}
+          build-args: APP_VERSION=${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test the container (hardened runtime, no secrets)
+        run: |
+          IMG="pharmaguard-ai:${{ steps.meta.outputs.tag }}"
+          docker run -d --name pg-smoke -p 8501:8501 --read-only --tmpfs /tmp --tmpfs /home/app/.streamlit \
+            --cap-drop ALL --security-opt no-new-privileges:true "$IMG"
+          for i in $(seq 1 40); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' pg-smoke)" = "healthy" ] && break
+            sleep 3
+          done
+          docker inspect -f 'health={{.State.Health.Status}}' pg-smoke
+          [ "$(docker inspect -f '{{.State.Health.Status}}' pg-smoke)" = "healthy" ] || { docker logs pg-smoke; exit 1; }
+          curl -fsS http://localhost:8501/_stcore/health && echo
+          curl -fsS -o /dev/null -w "GET / -> %{http_code}\n" http://localhost:8501/
+          echo "--- runs as non-root:";        docker exec pg-smoke id -u | grep -vx 0
+          echo "--- no .env / no secrets in image:"
+          docker exec pg-smoke sh -c 'test ! -e /app/.env && ! env | grep -qiE "api_key=.+|secret|password"'
+          docker history --no-trunc "$IMG" | (! grep -iE "api_key=|password=|sk-[A-Za-z0-9]{20}")
+          echo "--- every Streamlit page loads inside the container:"
+          docker exec -i pg-smoke python - <<'PY'
+          from streamlit.testing.v1 import AppTest
+          import glob
+          pages = ["app/streamlit_app.py"] + sorted(glob.glob("app/pages/*.py"))
+          bad = 0
+          for p in pages:
+              at = AppTest.from_file(p, default_timeout=120)
+              at.session_state["user_role"], at.session_state["user_name"] = "compliance_admin", "CI Smoke"
+              at.run()
+              print("OK  " if not at.exception else "FAIL", p)
+              bad += bool(at.exception)
+          raise SystemExit(bad)
+          PY
+      - name: Save deployment-ready image artifact
+        run: docker save "pharmaguard-ai:${{ steps.meta.outputs.tag }}" | gzip > pharmaguard-ai-image.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pharmaguard-ai-image
+          path: pharmaguard-ai-image.tar.gz
+          retention-days: 7
+      - name: Publish image to GHCR (opt-in)
+        # Off by default. Enable with repository variable PUBLISH_IMAGE=true; runs only for main and version tags.
+        if: ${{ vars.PUBLISH_IMAGE == 'true' && github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          SRC="pharmaguard-ai:${{ steps.meta.outputs.tag }}"
+          DST="${{ steps.meta.outputs.image }}"
+          docker tag "$SRC" "$DST:${{ steps.meta.outputs.tag }}" && docker push "$DST:${{ steps.meta.outputs.tag }}"
+          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then docker tag "$SRC" "$DST:latest" && docker push "$DST:latest"; fi
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then docker tag "$SRC" "$DST:${GITHUB_REF_NAME}" && docker push "$DST:${GITHUB_REF_NAME}"; fi
+
+  # ------------------------------------------------------------------------------------------------------------
+  deploy:
+    name: 7 · Deploy (optional, disabled by default)
+    needs: docker
+    # Runs only on main, and only when the repository variable DEPLOY_ENABLED is 'true'.
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && vars.DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Configure required reviewers / secrets on this GitHub Environment (Settings > Environments > production).
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: pharmaguard-ai-image
+      - name: Deploy
+        env:
+          DEPLOY_TARGET: ${{ vars.DEPLOY_TARGET }}          # e.g. ssh | azure-container-apps | aws-ecs | kubernetes
+          IMAGE_TAG: ${{ needs.docker.outputs.image_tag }}
+          # Secrets live in the 'production' Environment; nothing below is required until you implement a target.
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+        run: |
+          if [ -z "${DEPLOY_TARGET}" ]; then
+            echo "::error::DEPLOY_ENABLED=true but DEPLOY_TARGET is not set. Set the DEPLOY_TARGET variable and implement the matching case below."
+            exit 1
+          fi
+          case "${DEPLOY_TARGET}" in
+            ssh)
+              : "${DEPLOY_HOST:?Environment secret DEPLOY_HOST is required for the ssh target}"
+              : "${DEPLOY_SSH_KEY:?Environment secret DEPLOY_SSH_KEY is required for the ssh target}"
+              echo "TODO: gunzip -c pharmaguard-ai-image.tar.gz | ssh \$DEPLOY_HOST 'docker load && docker run -d --env-file /etc/pharmaguard.env -p 8501:8501 pharmaguard-ai:${IMAGE_TAG}'"
+              ;;
+            *)
+              echo "::error::No deployment implemented for DEPLOY_TARGET='${DEPLOY_TARGET}'. Add a case to this step (see README, 'Deployment')."
+              exit 1
+              ;;
+          esac

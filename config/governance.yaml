@@ -1,0 +1,263 @@
+# AI governance metadata for PharmaGuard AI.
+# Owners are ROLES - assign named individuals before any real use. Model in use, evaluation results, fingerprints
+# and security-control results are computed live and are not stored here.
+system:
+  name: PharmaGuard AI - Batch Investigation Assistant
+  version: 0.8.0-demo
+  environment: Demonstration prototype on synthetic data
+  use_case: Decision support for Quality Assurance staff investigating pharmaceutical batch quality. Python calculates all
+    figures from batch data, relevant (synthetic) QA procedures are retrieved, and an optional language model explains the
+    results. It never approves, rejects, releases or dispositions a batch.
+  out_of_scope:
+  - Batch disposition or release decisions
+  - Modifying batch or quality records
+  - Patient-facing or clinical use
+  - Use with real GxP data before formal validation
+  business_owner: Head of Quality Assurance (role - assign a named individual)
+  technical_owner: Data & AI Platform Lead (role - assign a named individual)
+  intended_users:
+  - role: Quality Analyst
+    use: Ask the assistant to investigate batches
+  - role: QA Reviewer (authorized Quality)
+    use: Review, approve, reject or request more analysis on AI findings
+  - role: Compliance / IT Admin
+    use: Run security checks and export governance reports
+  - role: Viewer
+    use: Read-only access to results and governance information
+data_sources:
+- name: Synthetic batch manufacturing dataset
+  description: 3,000 generated batches with deliberate quality defects (data/raw)
+  classification: Internal - synthetic
+  personal_data: false
+- name: Cleaned batch dataset
+  description: Output of the controlled cleaning pipeline with audit log (data/processed)
+  classification: Internal - synthetic
+  personal_data: false
+- name: QA knowledge documents
+  description: 4 synthetic SOP-style documents (knowledge/)
+  classification: Internal - synthetic
+  personal_data: false
+- name: Review database
+  description: SQLite log of AI runs, human reviews and guardrail events (data/app)
+  classification: Internal - contains reviewer names
+  personal_data: true
+- name: Observability trace store
+  description: SQLite request traces, spans and structured logs (data/app/observability.db, logs/)
+  classification: Internal - contains user names and batch IDs
+  personal_data: true
+data_classification:
+  current: Internal - synthetic demonstration data (no real batch, patient or personal data)
+  if_real_data: Real batch records would be Confidential and GxP-regulated. Sending them to an external LLM provider would
+    need a data-processing agreement, a data-residency review and QA approval. Keep the assistant in demo mode until then.
+model:
+  demo_mode: Deterministic template writer (no language model, no network)
+  live_mode: Optional external LLM configured only through environment variables (LLM_PROVIDER, LLM_API_KEY, LLM_MODEL)
+  data_sent_to_provider: Batch analysis JSON, retrieved SOP text and the sanitised question - only when a key is set
+  pinning_policy: Pin an exact model id in LLM_MODEL and re-run the evaluation suite whenever it changes
+prompt:
+  name: batch-investigation-system-prompt
+  version: 1.2.0
+  change_control: Any change to the system prompt requires a version bump, an evaluation re-run and QA approval
+risks:
+- id: R1
+  risk: Model states an unsupported number or fact
+  likelihood: Medium
+  impact: High
+  mitigation: All numbers are computed in Python; the output validator blocks numbers, citations and IDs that are not in the
+    supplied facts
+  controls:
+  - output_guard
+  - grounding
+  - evaluation
+  residual: Low
+- id: R2
+  risk: AI is used to make or influence a batch disposition
+  likelihood: Medium
+  impact: Critical
+  mitigation: No disposition capability or permission exists; requests are refused; disposition claims in output are blocked;
+    human review is required
+  controls:
+  - input_guard
+  - output_guard
+  - roles
+  - human_review
+  residual: Low
+- id: R3
+  risk: Prompt injection via user text or retrieved content
+  likelihood: Medium
+  impact: High
+  mitigation: Injection detection before any model call; user text delimited as data; retrieved chunks scanned; canary leak
+    detection
+  controls:
+  - input_guard
+  - output_guard
+  residual: Medium
+- id: R4
+  risk: Sensitive data sent to an external provider
+  likelihood: Low
+  impact: High
+  mitigation: Demo mode by default; provider used only when a key is configured; classification review required before real
+    data
+  controls:
+  - env_config
+  - data_classification
+  residual: Medium
+- id: R5
+  risk: Credential leakage in code, logs or outputs
+  likelihood: Low
+  impact: High
+  mitigation: Env-var-only secrets, .env gitignored, secret scanning, redacting logs and outputs
+  controls:
+  - secrets_scan
+  - secure_logging
+  - output_guard
+  residual: Low
+- id: R6
+  risk: Poor data quality leads to wrong analysis
+  likelihood: Medium
+  impact: Medium
+  mitigation: Data-quality scoring, controlled cleaning with audit log, critical results never imputed, missing data disclosed
+  controls:
+  - data_quality
+  - cleaning_audit
+  residual: Low
+- id: R7
+  risk: Reviewers rubber-stamp AI findings
+  likelihood: Medium
+  impact: Medium
+  mitigation: Four-eyes rule, mandatory comments to reject or request analysis, evidence and sources shown, append-only review
+    log
+  controls:
+  - human_review
+  - review_store
+  residual: Medium
+- id: R8
+  risk: Untracked changes to prompt, knowledge or configuration
+  likelihood: Medium
+  impact: Medium
+  mitigation: Fingerprint baseline with drift detection, change history, evaluation re-run
+  controls:
+  - baseline_fingerprints
+  - evaluation
+  residual: Medium
+- id: R9
+  risk: Vulnerable or end-of-life dependencies
+  likelihood: Medium
+  impact: Medium
+  mitigation: Version ranges, lockfile, pip-audit scanning and a runtime end-of-life check
+  controls:
+  - dependency_check
+  residual: Medium
+- id: R10
+  risk: Failures or misuse cannot be reconstructed (no traceability)
+  likelihood: Medium
+  impact: High
+  mitigation: Unique Run ID and OpenTelemetry-compatible trace per AI request (model, prompt version, sources, tool calls,
+    latency, tokens, guardrail result, errors); privacy-safe structured logs; observability dashboard with role-restricted
+    access
+  controls:
+  - observability
+  - secure_logging
+  - review_store
+  residual: Low
+limitations:
+- Built and evaluated with synthetic data only; real-world accuracy is unknown.
+- Regex-based injection and disposition detection can be evaded (other languages, look-alike characters).
+- Answer-relevance evaluation is a lexical proxy, not human or LLM-judged.
+- The knowledge base is four synthetic documents; it is not a substitute for real SOPs.
+- Statistical outlier flags (IQR / z-score) indicate unusual values, not confirmed errors or root causes.
+- The demo has no real authentication; roles come from a dropdown.
+- SQLite append-only triggers deter but do not replace a validated, access-controlled audit system.
+guardrails:
+- control: Input validation
+  implementation: src/guardrails/input_guard.py
+  purpose: Length, format, control characters, Batch_ID pattern
+- control: Prompt-injection defence
+  implementation: src/guardrails/input_guard.py
+  purpose: Block override, leak and role-change attempts before any model call
+- control: Restricted-action refusal
+  implementation: src/guardrails/input_guard.py
+  purpose: Refuse approve, reject, release, disposition and data-change requests
+- control: Output validation
+  implementation: src/guardrails/output_guard.py
+  purpose: Block disposition claims, prompt leaks, invented numbers, bad citations, fabricated IDs
+- control: Grounding
+  implementation: src/assistant/grounding.py
+  purpose: Every number must trace to the Python analysis or sources
+- control: Role-based access
+  implementation: src/guardrails/roles.py
+  purpose: Least-privilege permissions; no role can disposition a batch
+- control: Safe error handling
+  implementation: src/guardrails/safe_errors.py
+  purpose: Reference ids for users; redacted details in private logs
+- control: Observability & traceability
+  implementation: src/observability/tracing.py
+  purpose: Run ID + trace for every request; structured privacy-safe logs; OTLP-compatible export
+human_oversight:
+- Every AI answer is stored with a Run ID and is reviewable on the QA Review page.
+- Authorized QA reviewers Approve, Reject or Request More Analysis on each AI finding; comments are mandatory to reject or
+  request more analysis.
+- 'Four-eyes rule: reviewers cannot review runs they asked themselves.'
+- Approving an AI finding is not a batch disposition; disposition happens only in the quality system by authorized personnel.
+approval:
+  status: Not approved for production use
+  stage: Demonstration prototype
+  approvals:
+  - role: Business Owner (Head of Quality Assurance)
+    status: Pending
+  - role: Technical Owner (Data & AI Platform Lead)
+    status: Pending
+  - role: IT Security
+    status: Pending
+  - role: Data Protection / Privacy
+    status: Pending
+  conditions:
+  - Validation against real (de-identified) batch data with QA-defined acceptance criteria
+  - Named owners assigned and approvals recorded
+  - Real authentication / SSO and access review
+  - Data-processing agreement and residency review for any external LLM provider
+  - Independent security testing including prompt-injection red-teaming
+change_history:
+- version: 0.1.0
+  date: '2026-09-26'
+  category: Data
+  change: Project scaffold and reproducible synthetic batch dataset with deliberate defects
+  owner: Technical Owner
+- version: 0.2.0
+  date: '2026-09-26'
+  category: Data
+  change: Data-quality module, controlled cleaning pipeline and cleaning audit log
+  owner: Technical Owner
+- version: 0.3.0
+  date: '2026-09-26'
+  category: Analytics
+  change: Analytics dashboard with deterministic KPIs and insights
+  owner: Technical Owner
+- version: 0.4.0
+  date: '2026-09-26'
+  category: AI
+  change: Batch Investigation Assistant (RAG, deterministic analysis, LLM with demo fallback); system prompt 1.0.0
+  owner: Technical Owner
+- version: 0.5.0
+  date: '2026-09-26'
+  category: Safety
+  change: Guardrails, roles and human-in-the-loop QA review with append-only store; system prompt 1.1.0 (no-disposition and
+    untrusted-data rules)
+  owner: Technical Owner
+- version: 0.6.0
+  date: '2026-09-26'
+  category: Quality
+  change: AI evaluation framework, golden dataset, evaluation dashboard and expanded test suite
+  owner: Technical Owner
+- version: 0.7.0
+  date: '2026-09-26'
+  category: Governance
+  change: AI governance page, security controls, secret scanning, dependency checks and governance report; system prompt 1.2.0
+    registered
+  owner: Technical Owner
+- version: 0.8.0
+  date: '2026-09-26'
+  category: Observability
+  change: Run IDs and OpenTelemetry-compatible tracing for every AI request, local trace store, structured logging, token-usage
+    capture and Observability Dashboard; retrieval failures now degrade instead of failing the request
+  owner: Technical Owner

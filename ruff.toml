@@ -1,0 +1,13 @@
+# Lint configuration. Rules chosen to catch real defects (syntax errors, undefined names, unused / duplicate
+# imports and variables, bad comparisons) without enforcing a code style on the whole codebase.
+target-version = "py310"
+line-length = 140
+extend-exclude = [".venv", "data", "reports", "logs"]
+
+[lint]
+select = ["E9", "F", "B006", "B008", "B015", "B018", "PLE"]
+ignore = ["F841"]   # unused local variables: tolerated (test scaffolding)
+
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]   # re-exports
+"tests/*" = ["F811", "F401"]  # pytest fixtures are imported by name from other test modules

@@ -1,0 +1,47 @@
+# Keep secrets, local state and development files OUT of the image (and out of the build context).
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+**/*.pem
+**/*.key
+**/secrets
+**/secrets.*
+**/*.secret
+
+# Version control / CI
+.git
+.gitignore.local
+.github
+
+# Python / tooling caches
+.venv
+venv
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+.coverage
+.coverage.*
+htmlcov
+coverage.xml
+
+# Tests and dev-only files are not needed at run time
+tests
+pytest.ini
+ruff.toml
+requirements-dev.txt
+
+# Local runtime state must never be baked into an image
+data/app
+logs
+reports/security
+
+# Docker files themselves and editor noise
+Dockerfile
+docker-compose.yml
+.dockerignore
+.DS_Store
+.idea
+.vscode

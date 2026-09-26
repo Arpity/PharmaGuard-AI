@@ -1,0 +1,30 @@
+# Local convenience: docker compose up --build
+# Secrets are read from your git-ignored .env file at run time; nothing secret is baked into the image.
+services:
+  pharmaguard:
+    build:
+      context: .
+      args:
+        APP_VERSION: local
+    image: pharmaguard-ai:local
+    ports:
+      - "8501:8501"
+    env_file:
+      - path: .env          # optional: copy .env.example to .env and set LLM_API_KEY to enable a live LLM
+        required: false
+    volumes:
+      - pharmaguard_data:/app/data/app   # review database + observability traces
+      - pharmaguard_logs:/app/logs       # structured logs
+    restart: unless-stopped
+    read_only: true                       # immutable root filesystem ...
+    tmpfs:
+      - /tmp                              # ... with scratch space
+      - /home/app/.streamlit
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  pharmaguard_data:
+  pharmaguard_logs:

@@ -1,0 +1,62 @@
+{
+  "rows_raw": 3000,
+  "rows_clean": 2910,
+  "audit_entries": 5039,
+  "score_before": {
+    "overall": 96.73,
+    "grade": "Fair",
+    "dimensions": {
+      "completeness": 96.9,
+      "validity": 98.93,
+      "uniqueness": 97.0,
+      "consistency": 90.53,
+      "type_conformity": 97.99,
+      "outliers": 98.92
+    },
+    "issue_counts": {
+      "missing_cells": 1676,
+      "duplicate_rows": 90,
+      "invalid_values": 321,
+      "outliers": 324,
+      "type_issues": 664,
+      "category_inconsistencies": 1705
+    }
+  },
+  "score_after": {
+    "overall": 99.36,
+    "grade": "Excellent",
+    "dimensions": {
+      "completeness": 97.87,
+      "validity": 100.0,
+      "uniqueness": 100.0,
+      "consistency": 100.0,
+      "type_conformity": 100.0,
+      "outliers": 98.91
+    },
+    "issue_counts": {
+      "missing_cells": 1116,
+      "duplicate_rows": 0,
+      "invalid_values": 0,
+      "outliers": 317,
+      "type_issues": 0,
+      "category_inconsistencies": 0
+    }
+  },
+  "outlier_rows_flagged": 300,
+  "rows_missing_cqa": 654,
+  "changes_by_issue": {
+    "Inconsistent category": 1705,
+    "Missing value stored as text": 823,
+    "Missing process parameter": 658,
+    "Number stored as text": 423,
+    "Statistical outlier": 317,
+    "Invalid range value": 308,
+    "Missing category": 302,
+    "Inconsistent date format": 241,
+    "Missing plant": 87,
+    "Missing dosage form": 80,
+    "Exact duplicate row": 62,
+    "Duplicate Batch_ID with conflicting values": 28,
+    "Missing critical quality attribute": 5
+  }
+}

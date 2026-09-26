@@ -1,0 +1,98 @@
+# PharmaGuard AI - dataset generation & project configuration
+dataset:
+  n_rows: 3000
+  seed: 42
+  start_date: "2023-01-01"
+  end_date: "2025-12-31"
+  raw_path: data/raw/pharma_batch_raw.csv
+  log_path: reports/data_generation_log.json
+
+# Fraction of rows / cells affected by each intentional data-quality issue
+quality_issues:
+  duplicate_row_rate: 0.03        # exact + near duplicates (part of the 3,000 rows)
+  missing_rate:                   # per-column share of missing cells
+    default: 0.03
+    Humidity: 0.05
+    pH: 0.04
+    Dissolution: 0.06
+    Impurity_Level: 0.05
+    Operator_Shift: 0.03
+    Equipment_ID: 0.04
+  outlier_rate: 0.012             # per numeric column
+  invalid_range_rate: 0.010       # per numeric column
+  inconsistent_category_rate: 0.12
+  type_issue_rate: 0.015          # numeric cells stored as text with units, etc.
+  date_format_issue_rate: 0.08
+
+# Pharmaceutical specification limits (used to derive Quality_Status)
+specs:
+  Temperature: [18.0, 27.0]       # deg C
+  Humidity: [30.0, 60.0]          # % RH
+  pH: [5.5, 7.5]
+  Dissolution: [80.0, 105.0]      # % released
+  Assay: [95.0, 105.0]            # % label claim
+  Impurity_Level: [0.0, 1.0]      # % w/w
+  Yield_Percentage: [90.0, 102.0]
+
+# ---- Step 2: data quality & cleaning ----------------------------------------
+processed:
+  clean_path: data/processed/pharma_batch_clean.csv
+  audit_path: data/processed/cleaning_audit_log.csv
+  summary_path: data/processed/cleaning_summary.json
+
+# Physically / logically possible ranges. Values outside are INVALID (data errors),
+# unlike outliers, which are possible-but-extreme values.
+valid_ranges:
+  Batch_Size_Kg: [0.1, 10000]
+  Temperature: [-20, 100]
+  Humidity: [0, 100]
+  pH: [0, 14]
+  Dissolution: [0, 120]
+  Assay: [0, 120]
+  Impurity_Level: [0, 100]
+  Yield_Percentage: [0, 110]
+  Deviation_Count: [0, 100]
+  Cycle_Time_Hrs: [0.5, 168]
+
+outlier_detection:
+  method: iqr
+  iqr_multiplier: 3.0             # "extreme" fences (Q1 - 3*IQR, Q3 + 3*IQR)
+  group_by_product: [Batch_Size_Kg]   # columns whose scale depends on the product
+
+cleaning:
+  # Process parameters may be imputed (median by product).
+  impute_process_columns: [Temperature, Humidity, pH, Batch_Size_Kg, Cycle_Time_Hrs]
+  # Critical quality attributes are NEVER imputed (GxP: no fabricated results).
+  critical_quality_columns: [Dissolution, Assay, Impurity_Level, Yield_Percentage, Deviation_Count]
+
+score_weights:
+  completeness: 0.25
+  validity: 0.20
+  uniqueness: 0.15
+  consistency: 0.15
+  type_conformity: 0.15
+  outliers: 0.10
+
+# ---- Step 5: guardrails & human review -----------------------------------------
+guardrails:
+  max_question_chars: 500
+  max_answer_chars: 3000
+  block_on_ungrounded_numbers: true   # fail closed: an answer with numbers not in the Python analysis is replaced
+  allow_self_review: false            # four-eyes: the reviewer cannot be the person who ran the analysis
+review:
+  db_path: data/app/pharmaguard_review.db
+  error_log_path: logs/app_errors.log
+
+# ---- Step 6: AI evaluation -----------------------------------------------------
+evaluation:
+  golden_path: data/evaluation/golden_cases.json
+  results_path: reports/evaluation/latest.json
+  targets:                          # aggregate pass criteria (score 0-1 unless noted)
+    analytical_correctness: 0.98
+    retrieval_relevance: 0.70
+    groundedness: 1.00
+    answer_relevance: 0.90
+    unsupported_claim_rate_max: 0.0
+    guardrail_success: 1.00
+    tool_success: 1.00
+    latency_p95_ms_max: 1500

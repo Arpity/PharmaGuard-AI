@@ -16,6 +16,8 @@ on:
     tags: ["v*"]
   pull_request:
     branches: [main]
+  schedule:
+    - cron: "0 5 * * 1"      # weekly (Mon 05:00 UTC): re-run everything to catch new dependency advisories and drift
   workflow_dispatch:
 
 # Least privilege by default; individual jobs raise it only where needed.

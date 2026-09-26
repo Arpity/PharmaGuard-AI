@@ -3,7 +3,7 @@
 # and security-control results are computed live and are not stored here.
 system:
   name: PharmaGuard AI - Batch Investigation Assistant
-  version: 0.10.0-demo
+  version: 0.10.1-demo
   environment: Demonstration prototype on synthetic data
   use_case: Decision support for Quality Assurance staff investigating pharmaceutical batch quality. Python calculates all
     figures from batch data, relevant (synthetic) QA procedures are retrieved, and an optional language model explains the
@@ -285,4 +285,11 @@ change_history:
   category: Monitoring
   change: Production monitoring dashboard (application, AI, data, security, cost, business), drift and schema checks, security
     event tracking, Prometheus exporter and OpenTelemetry/Grafana integration assets
+  owner: Technical Owner
+- version: 0.10.1
+  date: '2026-09-26'
+  category: Audit
+  change: 'Independent production-readiness review: hardened disposition/injection input guards and bare-verdict output check,
+    clear cleaning errors on schema change, closing SQLite connections, Dockerfile lint fixes (numeric user, exec-form healthcheck),
+    Dependabot and weekly scheduled CI, README and .env.example corrections'
   owner: Technical Owner

@@ -1,28 +1,57 @@
 # PharmaGuard AI
 
-Pharmaceutical batch-quality analytics built with Python and Streamlit.
-**Status: Step 1 of N - project scaffold and synthetic raw dataset only.**
+Pharmaceutical batch-quality analytics with a governed AI investigation assistant (Python + Streamlit).
+Everything runs on **synthetic data**; without an LLM key the assistant runs in a deterministic **demo mode**.
+
+> It supports investigations - it never approves, rejects, releases or dispositions a batch. See *AI guardrails* below.
+> Status: demonstration prototype, **not approved for production or GxP use** (see `docs/PRODUCTION_READINESS_REPORT.md`).
 
 ## Quick start
+Requires Python 3.10+ (3.12 is what CI and Docker use; 3.9 works locally but is end-of-life) and, optionally, Docker.
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env            # optional; defaults come from config/config.yaml
-python scripts/generate_data.py # writes data/raw/pharma_batch_raw.csv
+pip install -r requirements-dev.txt          # runtime + test/lint/security tools  (use requirements.txt for runtime only)
+cp .env.example .env                         # optional: set LLM_API_KEY to enable a live LLM (unset = demo mode)
+
+pytest                                       # 296+ tests (unit, integration, Streamlit pages, end-to-end)
+streamlit run app/streamlit_app.py           # http://localhost:8501
 ```
-The generator is seeded (`RANDOM_SEED`, default 42), so output is byte-for-byte reproducible.
+The repository already contains the generated data (`data/raw`, `data/processed`), the golden evaluation set and the latest
+evaluation report, so the app and tests work immediately. To rebuild everything from scratch (all steps are deterministic):
+```bash
+python scripts/generate_data.py && python scripts/run_cleaning.py
+python scripts/build_golden.py && python scripts/run_evaluation.py && python scripts/evaluation_gate.py
+python scripts/register_baseline.py && python scripts/register_data_baseline.py   # governance + schema baselines
+```
+Docker and CI/CD instructions are in *Docker & CI/CD* below.
+
+## What is in the app
+| Page | Purpose |
+|---|---|
+| Data Quality | Score the raw data, drill into issues, run the cleaning pipeline, inspect the audit log |
+| Analytics Dashboard | KPIs, charts, filters and rule-based insights on the cleaned data |
+| Batch Investigation | Ask about a batch: deterministic analysis + RAG over QA procedures + optional LLM, with sources and guardrails |
+| QA Review | Humans approve / reject / request more analysis on AI findings (append-only, four-eyes) |
+| Evaluation Dashboard | Golden-set metrics vs targets |
+| AI Governance | System card, risks, approvals, live security controls, downloadable governance report |
+| Observability | Per-request traces, latency, guardrail and token metrics |
+| Production Monitoring | SLO status for application, AI, data, security, cost and business; incidents; simulation |
+
+Roles (demo dropdown, not authentication): Viewer, Quality Analyst, QA Reviewer, Compliance / IT Admin.
 
 ## Structure
 | Path | Purpose |
 |---|---|
-| `app/` | Streamlit application (later steps) |
-| `config/` | `config.yaml` (dataset params, issue rates, spec limits) + loader |
-| `data/raw/` | Untouched generated data - never edit by hand |
-| `data/processed/` | Cleaned data (later steps) |
-| `src/data_generation/` | Dataset generator |
-| `scripts/` | CLI entry points |
-| `reports/` | Generation log with counts of injected issues |
-| `models/`, `notebooks/`, `tests/` | Reserved for later steps |
+| `app/` | Streamlit app (`streamlit_app.py` + `pages/`) |
+| `src/` | Library code: `data_generation`, `data_quality`, `cleaning`, `analytics`, `assistant`, `guardrails`, `review`, `evaluation`, `governance`, `security`, `observability`, `monitoring` |
+| `config/` | `config.yaml`, `evaluation_gate.yaml`, `monitoring.yaml`, `governance.yaml` and baselines |
+| `data/` | `raw/` (never modified), `processed/`, `evaluation/` (golden set); `data/app/` holds runtime databases (git-ignored) |
+| `knowledge/` | Synthetic QA procedure documents for RAG |
+| `scripts/` | CLI entry points (generate, clean, evaluate, gate, security checks, exporter, publish) |
+| `tests/` | pytest suite |
+| `docs/`, `monitoring/` | Observability integration guide; Prometheus / Grafana / OpenTelemetry assets |
+| `Dockerfile`, `docker-compose.yml`, `.github/workflows/ci.yml` | Container image and CI/CD |
 
 ## Dataset (3,000 rows x 18 columns)
 Batch_ID, Product_Name, Dosage_Form, Manufacturing_Date, Plant, Batch_Size_Kg, Temperature, Humidity,
@@ -42,11 +71,10 @@ with the process measurements, plant and shift.
 
 Exact counts per issue are in `reports/data_generation_log.json`.
 
-## Step 2 - Data quality & cleaning
+## Data quality & cleaning
 ```bash
 python scripts/run_cleaning.py                    # raw -> data/processed/
 streamlit run app/streamlit_app.py                # open the "Data Quality" page
-pytest                                            # automated tests
 ```
 - `src/data_quality/` - reusable checks (missing, duplicates, outliers, invalid ranges, types,
   categories) and the weighted 0-100 Data Quality Score; `rules.py` holds shared parsers/master data.
@@ -58,14 +86,14 @@ pytest                                            # automated tests
 - Policy highlights: outliers are flagged, not deleted; critical quality attributes are never
   imputed; invalid values become missing rather than guessed; `data/raw/` is never written.
 
-## Step 3 - Analytics dashboard
+## Analytics dashboard
 `streamlit run app/streamlit_app.py` -> **Analytics Dashboard** (light theme via `.streamlit/config.toml`).
 - KPI cards, Plotly charts (status, product, plant, shift heatmap, attribute distributions with spec limits,
   deviations, monthly trends, anomalies) and filters for product, plant, date and quality status.
 - `src/analytics/kpis.py` computes every KPI/aggregate/insight with pandas. Failure rate = Fail / batches with a
   known status; risk = Under Review + Fail; averages ignore missing results.
 
-## Step 4 - Batch Investigation AI Assistant
+## Batch Investigation AI Assistant
 `streamlit run app/streamlit_app.py` -> **Batch Investigation**. Enter a Batch_ID and ask e.g. "Investigate this batch",
 "Why is this batch showing risk?", "Compare it with historical batches", "Which parameters are abnormal?",
 "What procedure should QA review?".
@@ -80,7 +108,7 @@ sources, evidence and pipeline trace.
   `LLM_MODEL`, `LLM_BASE_URL`. With no key, or if the call fails, a deterministic demo answer is produced from the same
   analysis and sources. Data is sent to a provider only when a key is configured.
 
-## Step 5 - AI guardrails & human-in-the-loop review
+## AI guardrails & human-in-the-loop review
 **Hard rule: the AI never approves, rejects, releases or dispositions a batch.** It has no capability to do so
 (no role holds those permissions; the store has no disposition field), and requests to do so are refused with an
 explanation that final disposition requires authorized Quality personnel.
@@ -104,12 +132,12 @@ tables are append-only (SQLite triggers). Guardrail events are logged in the sam
 Limitations: regex-based detection can be evaded (e.g. other languages, homoglyphs), so it is one layer among several;
 the demo has no real authentication; SQLite triggers deter but do not replace a validated, access-controlled audit system.
 
-## Step 6 - AI evaluation & test suite
+## AI evaluation & test suite
 ```bash
 python scripts/build_golden.py        # (re)build data/evaluation/golden_cases.json from the cleaned data
 python scripts/run_evaluation.py      # run all golden cases -> reports/evaluation/latest.json  (add --live for a real LLM)
 streamlit run app/streamlit_app.py    # open "Evaluation Dashboard"
-pytest                                # 135 tests;  pytest --cov=src --cov=config  for coverage;  pytest -m e2e  for the workflow
+pytest                                # full suite;  pytest --cov=src --cov=config  for coverage;  pytest -m e2e  for the workflow
 ```
 - **Golden dataset** (68 cases): 7 batch archetypes x 5 question types, 8 prompt injections, 8 disposition requests,
   invalid inputs, and 11 simulated adversarial model replies. Expected findings come from an independent oracle
@@ -123,7 +151,7 @@ pytest                                # 135 tests;  pytest --cov=src --cov=confi
 - Limitations: answer relevance is a lexical proxy (no LLM judge); the golden set is synthetic; demo mode scores the
   deterministic answer writer, so use `--live` to evaluate a real model's wording.
 
-## Step 7 - AI governance & security
+## AI governance & security
 ```bash
 streamlit run app/streamlit_app.py            # open "AI Governance"
 python scripts/run_security_checks.py --audit # run all security controls (+ pip-audit, needs network); exit 1 on any FAIL
@@ -144,7 +172,7 @@ python scripts/register_baseline.py           # record approved fingerprints aft
 - The approval status is *Not approved for production use*; approvals are recorded only by editing governance.yaml
   under change control - the page never grants approval.
 
-## Step 8 - Observability & traceability
+## Observability & traceability
 ```bash
 python scripts/generate_demo_traces.py 150   # synthetic traffic through the real pipeline -> data/app/observability.db
 streamlit run app/streamlit_app.py           # open "Observability" (QA Reviewer / Compliance-IT Admin roles)
@@ -167,7 +195,7 @@ streamlit run app/streamlit_app.py           # open "Observability" (QA Reviewer
   payload for any collector. To adopt the SDK, replace `Tracer` with an OTel tracer and the store with an OTLP exporter;
   the instrumentation calls (`start_span`, `set_attribute`, `record_exception`) keep the same shape.
 
-## Step 9 - Docker & CI/CD
+## Docker & CI/CD
 
 ### Run with Docker
 Requires Docker 24+ (BuildKit). The image is a multi-stage build on `python:3.12-slim`, runs as a non-root user (uid 10001),
@@ -191,8 +219,9 @@ docker run -d --name pharmaguard -p 8501:8501 --read-only --tmpfs /tmp --tmpfs /
   --cap-drop ALL --security-opt no-new-privileges:true \
   -v pharmaguard_data:/app/data/app -v pharmaguard_logs:/app/logs pharmaguard-ai:local
 
-# Or with Compose (reads .env if present)
+# Or with Compose (reads .env if present; set PHARMAGUARD_PORT if 8501 is already in use)
 docker compose up --build
+# PHARMAGUARD_PORT=8600 docker compose up --build
 
 # Health / logs / stop
 curl http://localhost:8501/_stcore/health          # -> ok
@@ -290,7 +319,7 @@ gh run watch                                      # follow the pipeline
 No repository secrets are required for stages 1-6. Add optional *variables* (see the CI/CD section) under
 Settings > Secrets and variables > Actions > Variables.
 
-## Step 10 - Production monitoring
+## Production monitoring
 Open **Production Monitoring** in the app (QA Reviewer / Compliance-IT Admin roles). It shows a status banner, a status card per
 domain and, per domain, indicators with `ok / warn / critical` status computed from `config/monitoring.yaml`:
 

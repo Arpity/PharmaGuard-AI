@@ -171,6 +171,11 @@ def impute(df: pd.DataFrame, audit: AuditLog, cfg: dict) -> pd.DataFrame:
 def clean(raw: pd.DataFrame, cfg: dict | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Clean a raw (all-text) frame. Returns (clean_df, audit_df). Does not touch the input."""
     cfg = cfg or load_config()
+    missing = [c for c in DATA_COLS if c not in raw.columns]
+    if missing:
+        raise ValueError(f"Raw data is missing required columns {missing}; the schema changed - update the pipeline or the source before cleaning")
+    if raw.empty:
+        raise ValueError("Raw data has no rows to clean")
     audit = AuditLog()
     df = raw[DATA_COLS].copy().astype(object)
     df.index = raw.index

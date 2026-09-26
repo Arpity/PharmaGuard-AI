@@ -27,9 +27,9 @@ def test_dockerfile_is_multistage_slim_and_pinned():
 
 def test_dockerfile_runs_as_non_root_and_exposes_the_streamlit_port():
     ins = instructions()
-    assert "USER app" in ins and "EXPOSE 8501" in ins
+    assert "USER 10001:10001" in ins and "EXPOSE 8501" in ins                  # numeric uid: required by Kubernetes runAsNonRoot
     assert any(i.startswith("RUN groupadd") and "10001" in i for i in ins)
-    assert ins.index("USER app") > max(n for n, i in enumerate(ins) if i.startswith("RUN"))          # no RUN after dropping privileges
+    assert ins.index("USER 10001:10001") > max(n for n, i in enumerate(ins) if i.startswith("RUN"))          # no RUN after dropping privileges
 
 
 def test_dockerfile_starts_streamlit_correctly_with_healthcheck():
@@ -155,7 +155,7 @@ def test_lockfile_pins_every_runtime_dependency_and_no_dev_tools():
 def test_compose_file_is_hardened_and_secret_free():
     c = yaml.safe_load((ROOT / "docker-compose.yml").read_text())
     svc = c["services"]["pharmaguard"]
-    assert "8501:8501" in svc["ports"] and svc["read_only"] is True and svc["cap_drop"] == ["ALL"]
+    assert "${PHARMAGUARD_PORT:-8501}:8501" in svc["ports"][0] and svc["read_only"] is True and svc["cap_drop"] == ["ALL"]
     assert "no-new-privileges:true" in svc["security_opt"] and svc["env_file"][0]["required"] is False
     assert "environment" not in svc or not any(SECRETISH.search(str(k)) and v for k, v in svc["environment"].items())
     assert {"pharmaguard_data", "pharmaguard_logs"} <= set(c["volumes"])
@@ -168,7 +168,7 @@ ON = WF.get("on", WF.get(True))
 
 
 def test_workflow_triggers_and_least_privilege():
-    assert "push" in ON and "pull_request" in ON and "workflow_dispatch" in ON
+    assert "push" in ON and "pull_request" in ON and "workflow_dispatch" in ON and ON["schedule"][0]["cron"]
     assert WF["permissions"] == {"contents": "read"}
     assert WF["concurrency"]["cancel-in-progress"] is True
 
@@ -227,3 +227,8 @@ def test_no_credentials_assumed_and_deployment_and_publish_are_opt_in():
 def test_actions_are_version_pinned():
     for use in re.findall(r"uses:\s*(\S+)", WF_TEXT):
         assert re.search(r"@v\d", use), f"unpinned action: {use}"
+
+
+def test_dependabot_covers_all_ecosystems():
+    d = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text())
+    assert {u["package-ecosystem"] for u in d["updates"]} == {"pip", "docker", "github-actions"}

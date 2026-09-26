@@ -7,14 +7,16 @@ st.title("💊 PharmaGuard AI")
 st.caption("Pharmaceutical batch-quality analytics")
 st.markdown(
     """
-**Available now**
-- **Data Quality** (sidebar): score the raw batch data, drill into each issue type, run the
-  controlled cleaning pipeline and inspect the audit log.
+Use the sidebar to open a page:
 
-- **Analytics Dashboard**: KPIs, interactive charts, filters (product, plant, date, status) and automatic business insights.
+- **Data Quality** - score the raw batch data, run the controlled cleaning pipeline, inspect the audit log.
+- **Analytics Dashboard** - KPIs, charts, filters and business insights.
+- **Batch Investigation** - ask about a batch (deterministic analysis + QA procedures + optional LLM).
+- **QA Review** - approve / reject / request more analysis on AI findings.
+- **Evaluation Dashboard**, **AI Governance**, **Observability**, **Production Monitoring**.
 
-**Coming in later steps**: batch-failure prediction and deeper root-cause analysis.
-
+The assistant supports investigations only: it never approves, rejects, releases or dispositions a batch.
 Raw data in `data/raw/` is read-only by design; cleaned data is written to `data/processed/`.
+Roles in the sidebar are a demo: there is no authentication.
 """
 )

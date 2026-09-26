@@ -8,7 +8,7 @@ services:
         APP_VERSION: local
     image: pharmaguard-ai:local
     ports:
-      - "8501:8501"
+      - "${PHARMAGUARD_PORT:-8501}:8501"     # host port; override if 8501 is taken:  PHARMAGUARD_PORT=8600 docker compose up
     env_file:
       - path: .env          # optional: copy .env.example to .env and set LLM_API_KEY to enable a live LLM
         required: false

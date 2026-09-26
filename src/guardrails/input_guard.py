@@ -24,6 +24,9 @@ _INJECTION = [re.compile(p, re.I) for p in [
     r"\b(jailbreak|dan\s+mode|developer\s+mode|do\s+anything\s+now)\b",
     r"</?\s*(system|assistant|instructions?)\s*>|\[/?(system|inst)\]|<\|im_(start|end)\|>|#{2,}\s*(system|instruction)",
     r"\bnew\s+(instructions?|rules?)\s*:",
+    r"\b(disregard|ignore|forget)\b.{0,20}\b(everything|anything|all)\b.{0,20}\b(above|before|earlier|prior|said)\b",
+    r"\brespond\s+(only\s+)?with\s+[\"']?(approved|released|pass|passed|ok)\b",
+    r"\bwhat\s+(were|are)\s+you\s+(told|instructed|given)\b|\b(initial|original|hidden)\s+(prompt|instructions?)\b",
 ]]
 _SQUASHED = ["ignorepreviousinstructions", "ignoreallinstructions", "ignoretheaboveinstructions",
              "disregardpreviousinstructions", "disregardallinstructions", "revealsystemprompt",
@@ -33,6 +36,12 @@ _VERBS = (r"(approv\w*|reject\w*|releas\w*|dispositio\w*|certif\w*|sign[\s-]?off
           r"destroy\w*|discard\w*|clear(?:ed)?\s+for)")
 _OBJ = r"(batch|lot|product|it|this|b\d{5})"
 _RESTRICTED = re.compile(rf"\b{_VERBS}\b.{{0,40}}\b{_OBJ}\b|\b{_OBJ}\b.{{0,40}}\b{_VERBS}\b", re.I)
+_RESTRICTED_EXTRA = [re.compile(p, re.I) for p in [
+    r"\b(ship\w*|distribut\w*|accept\w*|green[\s-]?light|greenlight)\b.{0,30}\b(batch|lot|it|this|b\d{5})\b|\b(batch|lot|it|this|b\d{5})\b.{0,30}\b(ship\w*|distribut\w*|accept\w*|green[\s-]?light)\b",
+    r"\b(pass|fail|clear|release|approve|reject)\s+(this|the|that)\s+(batch|lot)\b",
+    r"\bgood\s+to\s+go\b|\bgo(?:es)?\s+to\s+market\b|\bsafe\s+to\s+(?:ship|sell|use|distribute)\b|\bfit\s+for\s+(?:sale|distribution|release)\b",
+    r"\boverride\b.{0,30}\b(status|result|decision|flag|deviation)\b",
+]]
 _MUTATE = re.compile(r"\b(change|update|modify|edit|set|overwrite|delete|remove|alter|mark)\b.{0,30}"
                      r"\b(status|record|result|data|value|batch|quality)\b", re.I)
 _EXEMPT = re.compile(r"\b(release|approval)\s+(criteria|checklist|requirements?|procedures?|sop|process|steps)\b", re.I)
@@ -63,16 +72,22 @@ def validate_batch_id(batch_id: str) -> str | None:
     return b if BATCH_ID_RE.match(b) else None
 
 
+# Look-alike folding used ONLY for detection (never applied to the text that is kept): common Cyrillic / Greek homoglyphs and leetspeak.
+_FOLD = str.maketrans({"\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "p", "\u0441": "c", "\u0445": "x", "\u0456": "i", "\u0443": "y",
+                       "\u03bf": "o", "\u03b1": "a", "\u03b5": "e", "0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "7": "t", "@": "a", "$": "s"})
+
+
 def detect_injection(text: str) -> bool:
-    if any(p.search(text) for p in _INJECTION):
+    folded = text.translate(_FOLD)
+    if any(p.search(text) or p.search(folded) for p in _INJECTION):
         return True
-    squashed = re.sub(r"[^a-z]", "", text.lower())
+    squashed = re.sub(r"[^a-z]", "", folded.lower())
     return any(s in squashed for s in _SQUASHED)
 
 
 def detect_restricted(text: str) -> bool:
     t = _EXEMPT.sub(" ", text)
-    return bool(_RESTRICTED.search(t) or _MUTATE.search(t))
+    return bool(_RESTRICTED.search(t) or _MUTATE.search(t) or any(p.search(t) for p in _RESTRICTED_EXTRA))
 
 
 def check_question(question: str, max_chars: int = 500) -> InputCheck:

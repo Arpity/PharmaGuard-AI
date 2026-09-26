@@ -21,6 +21,8 @@ _DISPOSITION = [re.compile(p, re.I) for p in [
     r"\b(recommend|advise|suggest|conclude)\w*\s+(that\s+)?(you\s+|qa\s+|we\s+)?(to\s+)?(release|reject|approve)\s+(this|the)\s+batch",
     r"\b(disposition|decision|verdict|status)\s*(is|:|-)\s*(release|reject|approve)d?\b",
     r"\bfinal\s+(decision|disposition)\s*(is|:)\s*",
+    r"^\W*(approved|released|rejected|cleared|passed)\W*$",                       # the whole answer is just a verdict word
+    r"\b(status|result)\s*(is|:|-)\s*(approved|released|cleared)\b",
 ]]
 _CAUSAL = re.compile(r"\b(root\s+cause\s+(is|was)|definitely|certainly|undoubtedly|is\s+caused\s+by|was\s+caused\s+by|proves?\s+that)\b", re.I)
 _CITATION = re.compile(r"\[K(\d+)\]")

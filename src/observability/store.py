@@ -10,6 +10,8 @@ from typing import Optional
 
 import pandas as pd
 
+from src.review.sqlite_util import connect
+
 from .tracing import Span, to_otlp_json
 
 SCHEMA = """
@@ -46,9 +48,7 @@ class TraceStore:
             c.executescript(SCHEMA)
 
     def _conn(self) -> sqlite3.Connection:
-        c = sqlite3.connect(self.path)
-        c.row_factory = sqlite3.Row
-        return c
+        return connect(self.path)
 
     def record_request(self, row: dict, spans: list[Span]) -> None:
         cols = [k for k in row]

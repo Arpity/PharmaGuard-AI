@@ -10,6 +10,7 @@ FROM python:${PYTHON_VERSION}-slim AS builder
 ENV PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
+WORKDIR /build
 # requirements.lock pins every (transitive) dependency, so the image is reproducible and matches what CI tested.
 COPY requirements.txt requirements.lock ./
 RUN pip install -c requirements.lock -r requirements.txt
@@ -58,11 +59,11 @@ COPY --chown=app:app requirements.txt requirements.lock .env.example .gitignore 
 RUN mkdir -p data/app logs && chown -R app:app data/app logs
 VOLUME ["/app/data/app", "/app/logs"]
 
-USER app
+USER 10001:10001
 EXPOSE 8501
 
 # Streamlit's built-in liveness endpoint (no curl in the slim image, so use Python).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import os,sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:%s/_stcore/health' % os.environ.get('STREAMLIT_SERVER_PORT','8501'), timeout=4).status == 200 else 1)"
+    CMD ["python", "-c", "import os,sys,urllib.request as u; sys.exit(0 if u.urlopen('http://127.0.0.1:%s/_stcore/health' % os.environ.get('STREAMLIT_SERVER_PORT','8501'), timeout=4).status == 200 else 1)"]
 
 CMD ["streamlit", "run", "app/streamlit_app.py"]

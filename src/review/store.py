@@ -16,6 +16,8 @@ from typing import Optional
 import pandas as pd
 
 from src.guardrails import roles
+
+from .sqlite_util import connect
 from src.guardrails.input_guard import normalise
 
 DECISIONS = {"approved": "Approve AI Finding", "rejected": "Reject AI Finding", "more_analysis": "Request More Analysis"}
@@ -64,9 +66,7 @@ class ReviewStore:
             c.executescript(SCHEMA + TRIGGERS)
 
     def _conn(self) -> sqlite3.Connection:
-        c = sqlite3.connect(self.path)
-        c.row_factory = sqlite3.Row
-        return c
+        return connect(self.path)
 
     # ---- runs ------------------------------------------------------------------------------
     def save_run(self, inv, user: str, role: str) -> str:

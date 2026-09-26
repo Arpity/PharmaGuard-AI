@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import os
-import sqlite3
 from pathlib import Path
 
 from config import PROJECT_ROOT
 from src.assistant.knowledge import KnowledgeBase
 from src.assistant.llm import LLMConfig
+from src.review.sqlite_util import connect
 
 
 def _probe(name: str, fn) -> dict:
@@ -26,7 +26,7 @@ def _readable(path: Path) -> str:
 
 def _db_ok(path: Path) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(path) as c:
+    with connect(path) as c:
         c.execute("PRAGMA schema_version").fetchone()
     return f"{path.name} reachable"
 

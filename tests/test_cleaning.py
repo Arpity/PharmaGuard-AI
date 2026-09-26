@@ -155,3 +155,12 @@ def test_second_cleaning_pass_finds_nothing_left_to_fix(mk, cfg):
                            .astype(str).replace({"nan": "", "<NA>": ""}), cfg)
     issues = set(audit2["issue"])
     assert not issues & {"Inconsistent category", "Invalid range value", "Inconsistent date format", "Exact duplicate row"}
+
+
+def test_schema_change_fails_with_a_clear_error(mk, cfg):
+    make_df, row = mk
+    raw = make_df([row(Batch_ID=f"B{i:05d}") for i in range(1, 6)])
+    with pytest.raises(ValueError, match="missing required columns.*Cycle_Time_Hrs"):
+        _clean(raw.drop(columns=["Cycle_Time_Hrs"]), cfg)
+    with pytest.raises(ValueError, match="no rows"):
+        _clean(raw.iloc[0:0], cfg)

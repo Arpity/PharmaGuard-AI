@@ -45,3 +45,4 @@ docker-compose.yml
 .DS_Store
 .idea
 .vscode
+.vercel

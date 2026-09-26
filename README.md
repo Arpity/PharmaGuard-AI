@@ -343,3 +343,16 @@ python scripts/metrics_server.py             # Prometheus exporter: http://127.0
 Thresholds, windows, prices and budgets are in `config/monitoring.yaml`; no model prices are assumed (add yours). Integration with
 OpenTelemetry, Prometheus / Grafana (scrape config, alert rules, importable dashboard in `monitoring/`) and other platforms, plus what
 is real vs simulated in this demo, is documented in [docs/observability-integration.md](docs/observability-integration.md).
+
+### Deploy to Vercel (container Function)
+`Dockerfile.vercel` is the Vercel variant of the image: it listens on `$PORT` and keeps runtime state in `/tmp`. Vercel strips
+`.gitignore` from uploads, so it is not copied into this image.
+```bash
+npx vercel login                                   # one-time (device login)
+npx vercel deploy --prod --yes --name pharmaguard-ai
+```
+Caveats: the app has **no authentication** and the production `*.vercel.app` alias is public (Vercel Authentication protects only
+deployment-specific URLs on the Hobby plan) - enable Vercel Authentication / password protection on a paid plan before sharing.
+State (review and trace databases) lives in `/tmp` of each Function instance, so it is ephemeral and not shared between instances.
+Set `LLM_API_KEY` as a Vercel *environment variable* (never in the repo) to enable a live LLM. Long-lived Streamlit WebSocket sessions
+are subject to Vercel Function duration limits - use a container host (Cloud Run, Render, Fly.io) for durable production use.

@@ -85,7 +85,15 @@ def _keywords(exp: dict, intent: str, batch_id: str) -> list[list[str]]:
     return kw
 
 
-# NB: MD5 below is a change-detection fingerprint of the dataset, not a security control.
+def dataset_fingerprint(df: pd.DataFrame) -> str:
+    """Change-detection fingerprint (MD5, not a security control) of the cleaned data. Numbers are rounded and written with a
+    fixed format so the hash is identical across pandas / numpy versions and platforms."""
+    d = df.copy()
+    num = d.select_dtypes("number").columns
+    d[num] = d[num].astype(float).round(6)
+    return hashlib.md5(d.to_csv(index=False, float_format="%.6f").encode(), usedforsecurity=False).hexdigest()
+
+
 def build_golden(df: pd.DataFrame, cfg: dict) -> dict:
     specs, cases, n = cfg["specs"], [], 0
     picks = _pick(df)
@@ -153,7 +161,7 @@ def build_golden(df: pd.DataFrame, cfg: dict) -> dict:
         guardrail={"input": "passed", "blocked": False, "llm_calls": 1, "output": "passed"})
 
     return {"version": 1, "n_cases": len(cases), "archetype_batches": picks,
-            "dataset_md5": hashlib.md5(df.to_csv(index=False).encode(), usedforsecurity=False).hexdigest(), "cases": cases}
+            "dataset_md5": dataset_fingerprint(df), "cases": cases}
 
 
 def save_golden(golden: dict, path) -> None:

@@ -4,6 +4,8 @@ import re
 import pandas as pd
 import pytest
 
+from tests._paths import page
+
 from src.assistant import llm as L
 from src.assistant.pipeline import investigate
 from src.guardrails import roles
@@ -353,7 +355,7 @@ def test_observability_permissions():
 
 def _page(role, name="Tester"):
     from streamlit.testing.v1 import AppTest
-    at = AppTest.from_file("app/pages/7_Observability.py", default_timeout=120)
+    at = AppTest.from_file(page("app/pages/7_Observability.py"), default_timeout=120)
     at.session_state["user_name"], at.session_state["user_role"] = name, role
     return at.run()
 
@@ -374,7 +376,7 @@ def test_dashboard_shows_all_required_metrics(hist, kb, cfg, tmp_path, monkeypat
     r = Recorder(TraceStore(tmp_path / "dash.db"))
     clean = kpis.load_clean(PROJECT_ROOT / "data" / "processed" / "pharma_batch_clean.csv") if (PROJECT_ROOT / "data" / "processed" / "pharma_batch_clean.csv").exists() else hist
     generate_demo_traffic(60, clean, kb, cfg, r, seed=5)
-    at = AppTest.from_file("app/pages/7_Observability.py", default_timeout=120)
+    at = AppTest.from_file(page("app/pages/7_Observability.py"), default_timeout=120)
     at.session_state["user_role"], at.session_state["user_name"] = "compliance_admin", "Ada Admin"
     at.run()
     assert not at.exception
@@ -391,7 +393,7 @@ def test_assistant_page_writes_a_trace_with_the_same_run_id(tmp_path, monkeypatc
     monkeypatch.setenv("PHARMAGUARD_OBS_DB", str(tmp_path / "pg.db"))
     monkeypatch.setenv("PHARMAGUARD_DB_PATH", str(tmp_path / "rev.db"))
     monkeypatch.delenv("LLM_API_KEY", raising=False)
-    at = AppTest.from_file("app/pages/3_Batch_Investigation.py", default_timeout=120).run()
+    at = AppTest.from_file(page("app/pages/3_Batch_Investigation.py"), default_timeout=120).run()
     [t for t in at.text_input if t.label == "Batch_ID"][0].set_value("B00042").run()
     at.button[0].click().run()
     assert not at.exception

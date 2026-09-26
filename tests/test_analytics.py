@@ -2,6 +2,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tests._paths import page
+
 from src.analytics import kpis
 
 
@@ -88,7 +90,7 @@ def test_anomaly_table_only_flagged():
 
 def test_dashboard_page_renders_with_filters():
     from streamlit.testing.v1 import AppTest
-    at = AppTest.from_file("app/pages/2_Analytics_Dashboard.py", default_timeout=120).run()
+    at = AppTest.from_file(page("app/pages/2_Analytics_Dashboard.py"), default_timeout=120).run()
     assert not at.exception
     labels = [m.label for m in at.metric]
     assert labels[:4] == ["Total Batches", "Pass / Risk Batches", "Quality Failure Rate", "Deviations"]

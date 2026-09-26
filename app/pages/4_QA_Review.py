@@ -32,6 +32,8 @@ for c, key in zip(k, STATUS_LABELS):
     c.metric(STATUS_LABELS[key], int(counts.get(key, 0)))
 
 tab_queue, tab_audit = st.tabs(["Review queue", "Audit trail"])
+if "review_flash" in st.session_state:
+    st.success(st.session_state.pop("review_flash"))
 
 with tab_queue:
     f1, f2 = st.columns([1, 1])
@@ -97,8 +99,9 @@ with tab_queue:
         if picked:
             try:
                 rid = store.add_review(run_id, user, role, picked, comments)
-                st.success(f"Recorded: **{DECISIONS[picked]}** for {run_id} (review #{rid}). This is an entry about the AI "
-                           "finding only; no batch status was changed.")
+                # st.rerun() clears the page, so keep the confirmation in session state and show it after the refresh
+                st.session_state["review_flash"] = (f"Recorded: **{DECISIONS[picked]}** for {run_id} (review #{rid}). This is an entry "
+                                                    "about the AI finding only; no batch status was changed.")
                 st.rerun()
             except (ReviewError, roles.PermissionDenied) as e:
                 st.error(str(e))

@@ -3,6 +3,8 @@ import sqlite3
 
 import pytest
 
+from tests._paths import page
+
 from src.assistant import llm as L
 from src.assistant.pipeline import investigate
 from src.guardrails import input_guard as ig
@@ -238,7 +240,7 @@ def test_pages_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setenv("PHARMAGUARD_DB_PATH", str(tmp_path / "ui.db"))   # (also set globally by conftest)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
 
-    at = AppTest.from_file("app/pages/3_Batch_Investigation.py", default_timeout=120).run()
+    at = AppTest.from_file(page("app/pages/3_Batch_Investigation.py"), default_timeout=120).run()
     at.text_input[0].set_value("B00042").run()                                   # text_input[0] is the sidebar name
     ids = [t for t in at.text_input if t.label == "Batch_ID"]
     ids[0].set_value("B00042").run()
@@ -248,7 +250,7 @@ def test_pages_end_to_end(tmp_path, monkeypatch):
     run_ids = ReviewStore(tmp_path / "ui.db").list_runs()["run_id"].tolist()
     assert len(run_ids) == 1
 
-    rv = AppTest.from_file("app/pages/4_QA_Review.py", default_timeout=120)
+    rv = AppTest.from_file(page("app/pages/4_QA_Review.py"), default_timeout=120)
     rv.session_state["user_name"], rv.session_state["user_role"] = "Rita Reviewer", "qa_reviewer"
     rv.run()
     assert not rv.exception

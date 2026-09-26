@@ -2,6 +2,8 @@ import json
 import shutil
 
 import pytest
+
+from tests._paths import page
 import yaml
 
 from config import PROJECT_ROOT
@@ -149,7 +151,7 @@ def test_markdown_table_escapes_pipes_and_newlines():
 # ---- page -------------------------------------------------------------------------------------
 def _page(role, name="Tester"):
     from streamlit.testing.v1 import AppTest
-    at = AppTest.from_file("app/pages/6_AI_Governance.py", default_timeout=120)
+    at = AppTest.from_file(page("app/pages/6_AI_Governance.py"), default_timeout=120)
     at.session_state["user_name"], at.session_state["user_role"] = name, role
     return at.run()
 
@@ -176,7 +178,7 @@ def test_governance_page_permissions():
 def test_ai_request_logging_omits_question_text(tmp_path, monkeypatch):
     from streamlit.testing.v1 import AppTest
     monkeypatch.setenv("PHARMAGUARD_LOG_DIR", str(tmp_path / "logs"))
-    at = AppTest.from_file("app/pages/3_Batch_Investigation.py", default_timeout=120).run()
+    at = AppTest.from_file(page("app/pages/3_Batch_Investigation.py"), default_timeout=120).run()
     [t for t in at.text_input if t.label == "Batch_ID"][0].set_value("B00042").run()
     at.button[1].click().run()                               # "Why is this batch showing risk?"
     assert not at.exception

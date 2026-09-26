@@ -3,6 +3,8 @@ from pathlib import Path
 
 import pytest
 
+from tests._paths import page
+
 import src.assistant.analysis as analysis_mod
 from config import PROJECT_ROOT
 from src.analytics import kpis
@@ -206,7 +208,7 @@ def test_dashboard_renders_report(golden, clean_df, real_kb, cfg, tmp_path, monk
     path = tmp_path / "latest.json"
     run_evaluation(golden, clean_df, real_kb, cfg, save_to=path)
     monkeypatch.setenv("PHARMAGUARD_EVAL_PATH", str(path))
-    at = AppTest.from_file("app/pages/5_Evaluation_Dashboard.py", default_timeout=120).run()
+    at = AppTest.from_file(page("app/pages/5_Evaluation_Dashboard.py"), default_timeout=120).run()
     assert not at.exception
     labels = {m.label: m.value for m in at.metric}
     for k in ("Analytical correctness", "Retrieval relevance", "Groundedness", "Answer relevance", "Unsupported-claim rate",
@@ -218,5 +220,17 @@ def test_dashboard_renders_report(golden, clean_df, real_kb, cfg, tmp_path, monk
 def test_dashboard_without_results_shows_guidance(tmp_path, monkeypatch):
     from streamlit.testing.v1 import AppTest
     monkeypatch.setenv("PHARMAGUARD_EVAL_PATH", str(tmp_path / "missing.json"))
-    at = AppTest.from_file("app/pages/5_Evaluation_Dashboard.py", default_timeout=60).run()
+    at = AppTest.from_file(page("app/pages/5_Evaluation_Dashboard.py"), default_timeout=60).run()
     assert not at.exception and any("No evaluation results" in i.value for i in at.info)
+
+
+def test_dataset_fingerprint_is_stable_across_dtype_representations(clean_df):
+    """Same data held as int vs float, or with float noise below 1e-6, must hash identically (cross-version stability)."""
+    from src.evaluation.golden import dataset_fingerprint
+    a = clean_df.copy()
+    b = clean_df.copy()
+    b["Deviation_Count"] = b["Deviation_Count"].astype("float64")
+    b["Assay"] = b["Assay"] + 1e-9
+    assert dataset_fingerprint(a) == dataset_fingerprint(b)
+    b.loc[b["Assay"].first_valid_index(), "Assay"] += 0.01          # a real change must alter the hash (first row may be NaN)
+    assert dataset_fingerprint(a) != dataset_fingerprint(b)

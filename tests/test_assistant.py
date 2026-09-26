@@ -4,6 +4,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from tests._paths import page
+
 from src.assistant import analysis as A
 from src.assistant.grounding import ungrounded_numbers
 from src.assistant.intents import classify, sections_for
@@ -203,7 +205,7 @@ def test_pipeline_falls_back_to_demo_when_llm_fails(hist, cfg, kb):
 def test_assistant_page_renders_in_demo_mode(monkeypatch):
     from streamlit.testing.v1 import AppTest
     monkeypatch.delenv("LLM_API_KEY", raising=False)
-    at = AppTest.from_file("app/pages/3_Batch_Investigation.py", default_timeout=120).run()
+    at = AppTest.from_file(page("app/pages/3_Batch_Investigation.py"), default_timeout=120).run()
     at.text_input[0].set_value("B00042").run()
     assert not at.exception
     at.button[0].click().run()

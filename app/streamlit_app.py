@@ -1,6 +1,11 @@
 """PharmaGuard AI - home page. Run: streamlit run app/streamlit_app.py"""
-import app.components  # noqa: F401  (adds project root to sys.path)
-import streamlit as st
+import sys
+from pathlib import Path
+
+# `streamlit run app/streamlit_app.py` puts only app/ on sys.path, so add the project root before importing the `app` package.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+import streamlit as st  # noqa: E402
 
 st.set_page_config(page_title="PharmaGuard AI", page_icon="💊", layout="wide")
 st.title("💊 PharmaGuard AI")
